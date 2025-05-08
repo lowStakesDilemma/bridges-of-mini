@@ -1,518 +1,343 @@
-﻿using System;
-using System.Linq;
-using System.Text;
-using ASD;
-using System.Collections.Generic;
-using ASD.Graphs;
-using System.Reflection.Metadata.Ecma335;
-
-namespace ASD
+﻿namespace ASD
 {
-    public class Lab08Stage1TestCase : TestCase
-    {
-        int[,] P;
-        (int row, int col)[] M;
-        protected readonly string description;
-        protected (int s, int[] S) answer;
-        int[,] solutions;
+    using System;
+    using ASD.Graphs;
+    using ASD.Graphs.Testing;
 
-        public Lab08Stage1TestCase(int[,] P, (int row, int col)[] M, int[,] solutions, int timeLimit, string description) : base(timeLimit, null, description)
+    public class Lab10Stage1TestCase : TestCase
+    {
+        Graph G;
+        int[] color;
+        int expectedLength;
+        int[] answer;
+        public Lab10Stage1TestCase(Graph G, int[] color, int expectedLength, double timeLimit, string description) : base(timeLimit, null, description)
         {
-            this.description = description;
-            this.P = P;
-            this.M = M;
-            this.solutions = solutions;
+            this.G = (Graph)G.Clone();
+            this.color = (int[])color.Clone();
+            this.expectedLength = expectedLength;
         }
+
         protected override void PerformTestCase(object prototypeObject)
         {
-            answer = ((Lab08)prototypeObject).Stage1(this.P, this.M);
-            Array.Sort(answer.S);
+            answer = ((Lab10)prototypeObject).FindLongestRepetition((Graph)G.Clone(), (int[])color.Clone());
+            //if (answer != null)
+            //    Console.WriteLine(answer.Length);
         }
 
         protected override (Result resultCode, string message) VerifyTestCase(object settings)
         {
-            int[,] solutions = this.solutions;
-
-            if (solutions.Length == 0)
+            (Result resultCode, string message) tempFunction()
             {
-                if (answer.s == 0)
+                if ((answer == null) && expectedLength > 0)
+                    return (Result.WrongResult, "Nie znaleziono powtórzenia");
+                if (answer != null)
                 {
-                    return OkResult("OK");
-                }
-                return (Result.WrongResult, $"Rozwiązanie nie istnieje, a zwrócono s > 0, {this.description}");
-            }
-
-            if (answer.s != solutions.GetLength(1))
-            {
-                return (Result.WrongResult, $"Zwrócono savedNum={answer.s}, powinno być {solutions.GetLength(1)}, {this.description}");
-            }
-
-            if (answer.S.GetLength(0) != solutions.GetLength(1))
-            {
-                return (Result.WrongResult, $"savedNum OK, ale Saved ma rozmiar {answer.S.GetLength(0)}, powinno być {solutions.GetLength(1)}, ${this.description}");
-            }
-
-            bool found = false;
-            for (int i = 0; i < solutions.GetLength(0); ++i)
-            {
-                bool ok = true;
-                for (int j = 0; j < solutions.GetLength(1); ++j)
-                {
-                    if (solutions[i, j] != answer.S[j])
+                    if (answer.Length % 2 != 0)
+                        return (Result.WrongResult, "Zwrócono tablicę nieparzystej długości");
+                    if (answer.Length > G.VertexCount)
+                        return (Result.WrongResult, "Zwrócono tablicę dłuższą niż liczba wierzchołków grafu");
+                    int l = answer.Length / 2;
+                    for (int i = 0; i < l; i++)
+                        if (color[answer[i]] != color[answer[i + l]])
+                            return (Result.WrongResult, "Zwrócona tablica nie zawiera powtórzenia");
+                    bool[] used = new bool[G.VertexCount];
+                    if (answer.Length > 0)
+                        used[answer[0]] = true;
+                    for (int i = 1; i < answer.Length; i++)
                     {
-                        ok = false;
-                        break;
+                        if (!G.HasEdge(answer[i - 1], answer[i]))
+                            return (Result.WrongResult, "Zwrócona ścieżka przechodzi po nieistniejącej krawędzi");
+                        if (used[answer[i]])
+                            return (Result.WrongResult, "Zwrócona ścieżka odwiedza ten sam wierzchołek więcej niż raz");
+                        used[answer[i]] = true;
                     }
+
+                    if (answer.Length < expectedLength)
+                        return (Result.WrongResult, "Zwrócono za krótkie powtórzenie");
                 }
-                if (ok)
-                {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found)
-            {
-                return (Result.WrongResult, $"Liczba maszyn OK, ale zwrócono złe maszyny, {this.description}");
+                if (answer != null && expectedLength < answer.Length)
+                    return (Result.WrongResult, $"Błąd w testach (znaleziono powtórzenie długości {answer.Length}, którego nie powinno być), proszę o kontakt z koordynatorem przedmiotu");
+
+                return (Result.Success, "OK");
             }
 
-            foreach (int i in answer.S)
-            {
-                if (this.P[this.M[i].row, this.M[i].col] == 0)
-                {
-                    return (Result.WrongResult, $"Zwrócono maszynę, dla której wartość w tablicy P wynosi 0, {this.description}");
-                }
-            }
-
-            return OkResult("OK");
+            (Result resultCode, string message) = tempFunction();
+            message += $" ({base.Description})";
+            return (resultCode, message);
         }
-
-        public (Result resultCode, string message) OkResult(string message) =>
-            (TimeLimit < PerformanceTime ? Result.LowEfficiency : Result.Success,
-            $"{message} {PerformanceTime.ToString("#0.00")}s");
     }
 
-    public class Lab08Stage2TestCase : TestCase
+    public class Lab10Tests : TestModule
     {
-        int[,] P;
-        (int row, int col)[] M;
-        int[] W;
-        int k;
-        int bestCost;
-        List<List<int>> solutions;
-        protected readonly string description;
-        protected (int d, int[] S) answer;
-
-        public Lab08Stage2TestCase(int[,] P, (int row, int col)[] M, int[] W, int k, int bestCost, List<List<int>> solutions, int timeLimit, string description) : base(timeLimit, null, description)
-        {
-            this.description = description;
-            this.P = P;
-            this.M = M;
-            this.W = W;
-            this.k = k;
-            this.bestCost = bestCost;
-            this.solutions = solutions;
-            // this.expectedLength = expectedLength;
-        }
-        protected override void PerformTestCase(object prototypeObject)
-        {
-            answer = ((int d, int[] S))((Lab08)prototypeObject).Stage2(this.P, this.M, this.W, this.k);
-            Array.Sort(answer.S);
-        }
-
-        protected override (Result resultCode, string message) VerifyTestCase(object settings)
-        {
-            List<List<int>> solutions = this.solutions;
-
-            if (answer.d < 0)
-            {
-                return (Result.WrongResult, $"Zwrócono ujemny zysk {answer.d}, {this.description}");
-            }
-
-            /*
-            if(solutions.Count == 0)
-            {
-                if(answer.S.Length == 0)
-                {
-                    return OkResult("Ok");
-                }
-                return (Result.WrongResult, "Rozwiązanie nie istnieje, a zwrócono |S| > 0 maszyn");
-            }
-            */
-
-            if (answer.d != this.bestCost)
-            {
-                return (Result.WrongResult, $"Zwrócono zły zysk. Jest {answer.d}, powinno być {this.bestCost}, {this.description}");
-            }
-
-            bool found = false;
-            foreach (List<int> solution in solutions)
-            {
-                if (solution.Count != answer.S.Length)
-                {
-                    continue;
-                }
-                bool ok = true;
-                int i = 0;
-                foreach (int m in solution)
-                {
-                    if (m != answer.S[i])
-                    {
-                        ok = false;
-                        break;
-                    }
-                    ++i;
-                }
-                if (ok)
-                {
-                    found = true;
-                    break;
-                }
-            }
-
-            foreach (int i in answer.S)
-            {
-                if (this.P[this.M[i].row, this.M[i].col] == 0)
-                {
-                    return (Result.WrongResult, $"Zwrócono maszynę, dla której wartość w tablicy P wynosi 0, {this.description}");
-                }
-            }
-
-            if (!found)
-            {
-                return (Result.WrongResult, $"Koszt OK, ale zwrócono złe maszyny, {this.description}");
-            }
-
-
-            return OkResult("OK");
-        }
-
-        public (Result resultCode, string message) OkResult(string message) =>
-            (TimeLimit < PerformanceTime ? Result.LowEfficiency : Result.Success,
-            $"{message} {PerformanceTime.ToString("#0.00")}s");
-    }
-
-
-    public class Lab06Tests : TestModule
-    {
-        TestSet Stage1 = new TestSet(prototypeObject: new Lab08(), description: "Etap I", settings: true);
-        TestSet Stage2 = new TestSet(prototypeObject: new Lab08(), description: "Etap II", settings: true);
+        TestSet Stage1small = new TestSet(prototypeObject: new Lab10(), description: "Etap I, małe testy", settings: true);
+        TestSet Stage1medium = new TestSet(prototypeObject: new Lab10(), description: "Etap II, średnie testy", settings: true);
+        TestSet Stage1large = new TestSet(prototypeObject: new Lab10(), description: "Etap III, duże testy", settings: true);
 
         public override void PrepareTestSets()
         {
-            TestSets["Etap I"] = Stage1;
-            TestSets["Etap II"] = Stage2;
-
-            PrepareTests();
+            TestSets["Etap I małe"] = Stage1small;
+            TestSets["Etap II średnie"] = Stage1medium;
+            TestSets["Etap III duże"] = Stage1large;
+            PrepareSmallTests();
+            PrepareMediumTests();
+            PrepareLargeTests();
         }
 
-        void PrepareTests()
+        void PrepareSmallTests()
         {
-            // ===== STAGE I =====
-            {
-                int[,] P = new int[,]
-                {
-                    {2, 0, 1, 0},
-                    {2, 3, 1, 1},
-                    {1, 1, 0, 1}
-                };
-                (int row, int col)[] M = new (int row, int col)[] { (0, 2), (2, 0), (2, 1), (2, 3) };
-                int[,] solutions =
-                {
-                    {0, 1, 2},
-                    {0, 1, 3},
-                    {0, 2, 3},
-                    {1, 2, 3}
-                };
-                Stage1.TestCases.Add(new Lab08Stage1TestCase(P, M, solutions, 1, "Przykład 1 z treści zadania"));
-            }
-            {
-                int[,] P = new int[,]
-                {
-                    {1, 1, 0, 0},
-                    {1, 1, 1, 1},
-                    {1, 1, 0, 1}
-                };
-                (int row, int col)[] M = new (int row, int col)[] { (2, 1), (2, 3) };
-                int[,] solutions =
-                {
-                    {0, 1}
-                };
-                Stage1.TestCases.Add(new Lab08Stage1TestCase(P, M, solutions, 1, "Przykład 2 z treści zadania"));
-            }
-            {
-                int[,] P = new int[,]
-                {
-                    {1, 0, 1, 0 },
-                    {1, 0, 1, 0 },
-                    {1, 0, 1, 0 },
-                    {1, 0, 1, 0 },
-                    {1, 0, 1, 0 }
-                };
-                (int row, int col)[] M = new (int row, int col)[] { (0, 1), (3, 1), (3, 3), (4, 3) };
-                int[,] solutions = { };
-                Stage1.TestCases.Add(new Lab08Stage1TestCase(P, M, solutions, 1, "Brak rozwiązań"));
 
-            }
-            {
-                int[,] P = new int[,]
-                {
-                    {3},
-                    {4 },
-                    {3 },
-                    {100000 },
-                    {5 },
-                    {10 }
-                };
-                (int row, int col)[] M = new (int row, int col)[] { (0, 0), (2, 0), (3, 0), (4, 0) };
-                int[,] solutions = {
-                    {0, 1, 2 },
-                    {0, 1, 3 },
-                    {0, 2, 3 },
-                    {1, 2, 3 }
-                };
-                Stage1.TestCases.Add(new Lab08Stage1TestCase(P, M, solutions, 1, "Edge case, jedna kolumna"));
-            }
-            {
-                int[,] P = new int[,]
-                {
-                    {4, 2, 0, 1, 0 }
-                };
-                (int row, int col)[] M = new (int row, int col)[] { (0, 0), (0, 1), (0, 3), (0, 4) };
-                int[,] solutions =
-                {
-                    {0, 1, 2 }
-                };
-                Stage1.TestCases.Add(new Lab08Stage1TestCase(P, M, solutions, 1, "Edge case, jeden wiersz"));
-            }
-            {
-                int[,] P = null;
-                (int row, int col)[] M = null;
-                (P, M) = randomStageI(20, 20, 10, 3, 42);
-                int[,] solutions = { { 0, 8 }, { 2, 8 }, { 3, 8 }, { 6, 8 } };
-                // Utils.generateAllSolutions(P, M, "out.txt");
-                Stage1.TestCases.Add(new Lab08Stage1TestCase(P, M, solutions, 1, "Test losowy 1"));
-            }
-            {
-                int[,] P = null;
-                (int row, int col)[] M = null;
-                (P, M) = randomStageI(50, 60, 15, 5, 123);
-                int[,] solutions = { { 0, 1, 2, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14 } };
-                // Utils.generateAllSolutions(P, M, "out.txt");
-                Stage1.TestCases.Add(new Lab08Stage1TestCase(P, M, solutions, 1, "Test losowy 2"));
-            }
-            {
-                int[,] P = null;
-                (int row, int col)[] M = null;
-                (P, M) = randomStageI(60, 50, 15, 3, 321);
-                int[,] solutions = {
-                    { 1, 2, 5, 6, 8, 10 },
-                    { 1, 2, 5, 6, 8, 13 },
-                    { 1, 2, 5, 8, 10, 13 },
-                    { 1, 5, 6, 8, 10, 13},
-                    { 2, 5, 6, 8, 10, 13}
-                };
-                // Utils.generateAllSolutions(P, M, "out.txt");
-                Stage1.TestCases.Add(new Lab08Stage1TestCase(P, M, solutions, 1, "Test losowy 3"));
-            }
+            Graph G2 = new Graph(1);
+            int[] c1 = { 1 };
+            Stage1small.TestCases.Add(new Lab10Stage1TestCase(G2, c1, 0, 1, "Pojedynczy wierzcholek"));
 
-            (int[,] P, (int row, int col)[] M) randomStageI(int h, int w, int numMachines, int maxP, int seed)
-            {
-                Random random = new Random(seed);
-                int[,] P = new int[h, w];
-                for (int r = 0; r < h; ++r)
-                {
-                    for (int c = 0; c < w; ++c)
-                    {
-                        P[r, c] = random.Next(0, maxP);
-                    }
-                }
-                (int row, int col)[] M = GenerateDistinctPairs(h, w, numMachines, random);
-                return (P, M);
-            }
+            Graph Gse = new Graph(2);
+            Gse.AddEdge(0, 1);
+            int[] cse1 = { 1, 2 };
+            int[] cse2 = { 1, 1 };
+            Stage1small.TestCases.Add(new Lab10Stage1TestCase(Gse, cse1, 0, 1, "Krawedz bez powtorzenia"));
+            Stage1small.TestCases.Add(new Lab10Stage1TestCase(Gse, cse2, 2, 1, "Krawedz z powtorzeniem"));
+
+            Graph G = new Graph(10);
+            for (int i = 0; i < 9; i++)
+                G.AddEdge(i, i + 1);
+            int[] col1 = { 1, 2, 3, 2, 1, 3, 2, 3, 1, 2 };
+            int[] col2 = { 2, 3, 2, 1, 3, 2, 1, 2, 3, 1 };
+            Stage1small.TestCases.Add(new Lab10Stage1TestCase(G, col1, 0, 1, "Sciezka bez powtorzen"));
+            Stage1small.TestCases.Add(new Lab10Stage1TestCase(G, col2, 6, 1, "Sciezka z powtorzeniem"));
 
 
-            (int row, int col)[] GenerateDistinctPairs(int h, int w, int n, Random random)
-            {
-                var distinctPairs = new HashSet<(int row, int col)>();
+            int[] col3 = { 1, 2, 3, 4, 1, 5, 4, 3, 2, 5 };
+            for (int i = 0; i < 8; i++)
+                G.AddEdge(i, i + 2);
+            Stage1small.TestCases.Add(new Lab10Stage1TestCase(G, col3, 0, 1, "Kwadrat sciezki bez powtorzen"));
 
-                while (distinctPairs.Count < n)
-                {
-                    int x = random.Next(0, h);
-                    int y = random.Next(0, w);
+            int[] col4 = { 1, 2, 3, 4, 8, 1, 9, 2, 3, 4 };
+            Stage1small.TestCases.Add(new Lab10Stage1TestCase(G, col4, 8, 1, "Kwadrat sciezki z powtorzeniem"));
 
-                    distinctPairs.Add((x, y));
-                }
+            Graph GP = new Graph(10);
+            GP.AddEdge(0, 1);
+            GP.AddEdge(0, 2);
+            GP.AddEdge(0, 4);
+            GP.AddEdge(1, 3);
+            GP.AddEdge(1, 7);
+            GP.AddEdge(2, 6);
+            GP.AddEdge(2, 8);
+            GP.AddEdge(3, 5);
+            GP.AddEdge(3, 8);
+            GP.AddEdge(4, 5);
+            GP.AddEdge(4, 9);
+            GP.AddEdge(5, 6);
+            GP.AddEdge(6, 7);
+            GP.AddEdge(7, 9);
+            GP.AddEdge(8, 9);
+            int[] colp = { 3, 2, 4, 3, 2, 1, 5, 1, 6, 4 };
+            int[] colnp = { 3, 2, 4, 3, 6, 7, 6, 1, 5, 4 };
+            Stage1small.TestCases.Add(new Lab10Stage1TestCase(GP, colp, 6, 1, "Petersen z powtorzeniem"));
+            Stage1small.TestCases.Add(new Lab10Stage1TestCase(GP, colnp, 0, 1, "Petersen bez powtorzenia"));
 
-                return distinctPairs.ToArray();
-            }
-            // ===== STAGE I  =====
-            // ===== STAGE II =====
-            {
-                int[,] P = new int[,]
-                {
-                    {1, 1, 0, 0},
-                    {1, 1, 1, 1},
-                    {1, 1, 0, 1}
-                };
-                (int row, int col)[] M = new (int row, int col)[] { (2, 1), (2, 3) };
-                int[] W = new int[] { 1000, 400 };
-                int k = 100;
-                int bestCost = 700;
-                List<List<int>> solutions = new List<List<int>>()
-                {
-                    new List<int>(){0}
-                };
-                Stage2.TestCases.Add(new Lab08Stage2TestCase(P, M, W, k, bestCost, solutions, 1, "Przykład z treści zadania"));
-            }
-            {
-                int[,] P = new int[,]
-                {
-                    {1, 1, 0, 0},
-                    {1, 1, 1, 1},
-                    {1, 1, 0, 1}
-                };
-                (int row, int col)[] M = new (int row, int col)[] { (2, 1), (2, 3) };
-                int[] W = new int[] { 1000, 5000 };
-                int k = 100;
-                int bestCost = 5100;
-                List<List<int>> solutions = new List<List<int>>()
-                {
-                    new List<int>(){0, 1}
-                };
-                Stage2.TestCases.Add(new Lab08Stage2TestCase(P, M, W, k, bestCost, solutions, 1, "Przykład z treści zadania, żółta maszyna warta 5000"));
-            }
-            {
-                int[,] P = new int[,]
-                {
-                    {5, 5, 5, 5, 5},
-                    {5, 5, 5, 5, 5},
-                    {5, 5, 5, 5, 5},
-                    {5, 5, 5, 5, 5},
-                    {5, 5, 5, 5, 5}
-                };
-                (int row, int col)[] M = new (int row, int col)[] { (0, 4), (1, 1), (3, 4) };
-                int[] W = new int[] { 10, 20, 30 };
-                int k = 50;
-                int bestCost = 0;
-                List<List<int>> solutions = new List<List<int>>() { new List<int>() };
-                Stage2.TestCases.Add(new Lab08Stage2TestCase(P, M, W, k, bestCost, solutions, 1, "Nie opłaca się ratować żadnej maszyny"));
-            }
-            {
-                int[,] P = new int[,] {
-                    {4, 0, 2, 2},
-                    {4, 3, 0, 3 },
-                    {4, 2, 0, 0},
-                    {2, 0, 2, 3}
-                };
-                (int row, int col)[] M = new (int row, int col)[] { (2, 0), (1, 2), (3, 1), (0, 2), (2, 2) };
-                int[] W = new int[] { 4, 4, 1, 2, 5 };
-                int k = 1;
-                // (P, M, W, k) = randomStageII(4, 4, 5, 4, 5, 5, 768);
-                List<List<int>> solutions = new List<List<int>> { new List<int>() { 0, 3 } };
-                int bestCost = 2;
-                // Utils.generateAllStage2Solutions(P, M, W, k, "out2.txt");
-                Stage2.TestCases.Add(new Lab08Stage2TestCase(P, M, W, k, bestCost, solutions, 1, "Test losowy 1"));
-            }
-            {
-                int[,] P = null;
-                (int row, int col)[] M = null;
-                int[] W = null;
-                int k = -1;
-                (P, M, W, k) = randomStageII(6, 5, 5, 7, 5, 5, 768);
-                List<List<int>> solutions = new List<List<int>> {
-                    new List<int>() {}, new List<int>() {1}
-                };
-                int bestCost = 0;
-                // Utils.generateAllStage2Solutions(P, M, W, k, "out2.txt");
-                Stage2.TestCases.Add(new Lab08Stage2TestCase(P, M, W, k, bestCost, solutions, 1, "Test losowy 2"));
-            }
-            {
-                int[,] P = new int[,] {
-                    { 5, 0, 3, 2, 5, 4, 0, 4},
-                    { 5, 2, 0, 0, 3, 0, 3, 3},
-                    { 4, 0, 2, 4, 5, 1, 4, 1},
-                    { 5, 2, 1, 3, 4, 3, 4, 4},
-                    { 0, 1, 4, 0, 1, 4, 5, 0},
-                    { 0, 0, 3, 1, 4, 0, 3, 2},
-                    { 1, 4, 3, 5, 4, 5, 5, 4},
-                    { 2, 1, 3, 2, 2, 2, 0, 2}
-                };
-                (int row, int col)[] M = new(int row, int col)[] {
-                    (6, 2),
-                    (7, 2),
-                    (1, 4),
-                    (3, 7),
-                    (2, 3),
-                    (4, 6),
-                    (5, 4),
-                    (6, 5),
-                    (2, 7),
-                    (7, 6)
-                };
-                int[] W = new int[] { 5, 1, 2, 1, 4, 5, 2, 3, 3, 4 };
-                int k = 1;
-                // (P, M, W, k) = randomStageII(8, 8, 10, 5, 5, 3, 768);
-                List<List<int>> solutions = new List<List<int>> {
-                    new List<int>() {}, new List<int>() {2}, new List<int>(){4},
-                    new List<int>() {2, 4}, new List<int>() {8}, new List<int>(){2, 8},
-                    new List<int>() {4, 8}, new List<int>() {2, 4, 8}
-                };
-                int bestCost = 0;
-                // Utils.generateAllStage2Solutions(P, M, W, k, "out2.txt");
-                Stage2.TestCases.Add(new Lab08Stage2TestCase(P, M, W, k, bestCost, solutions, 1, "Test losowy 2"));
-            }
-            {
-                var (P, M, W, k) = randomStageII(30, 10, 12, 8, 100, 5, 948);
-                List<List<int>> solutions = new List<List<int>>() { new List<int>() {1, 8}, new List<int>() { 0, 1, 8 } };
-                int bestCost = 85;
-                // Utils.generateAllStage2Solutions(P, M, W, k, "out2.txt");
-                Stage2.TestCases.Add(new Lab08Stage2TestCase(P, M, W, k, bestCost, solutions, 10, "Duży test losowy 1"));
-            }
-            {
-                var (P, M, W, k) = randomStageII(16, 18, 10, 8, 1000, 100, 948);
-                List<List<int>> solutions = new List<List<int>>() { new List<int>() { 0, 1, 4, 5, 6, 7, 9 } };
-                int bestCost = 3446;
-                // Utils.generateAllStage2Solutions(P, M, W, k, "out3.txt");
-                Stage2.TestCases.Add(new Lab08Stage2TestCase(P, M, W, k, bestCost, solutions, 5, "Duży test losowy 2"));
-            }
 
-            (int[,] P, (int row, int col)[] M, int[] W, int k) randomStageII(int h, int w, int numMachines, int maxP, int maxW, int maxK, int seed)
-            {
-                Random random = new Random(seed);
-                int[,] P = new int[h, w];
-                for (int r = 0; r < h; ++r)
-                {
-                    for (int c = 0; c < w; ++c)
-                    {
-                        // P[r, c] = random.Next(0, maxP+1);
-                        P[r, c] = random.Next(0, maxP + 1);
-                    }
-                }
-                (int row, int col)[] M = GenerateDistinctPairs(h, w, numMachines, random);
-                int[] W = new int[numMachines];
-                for(int i = 0; i < numMachines; ++i)
-                {
-                    W[i] = random.Next(1, maxW+1);
-                }
-                int k = random.Next(1, maxK+1);
-                return (P, M, W, k);
-            }
-            // ===== STAGE II =====
+            RandomGraphGenerator rgg = new RandomGraphGenerator(10);
+            Random rand = new Random(10);
 
+            int[] wyniks = { 6, 4, 2, 0, 2, 0, 2, 2, 2 };
+            for (int i = 0; i < 5; i++)
+            {
+                Graph Gr = rgg.Graph(18, 0.2);
+                int[] col = new int[Gr.VertexCount];
+                for (int j = 0; j < Gr.VertexCount; j++)
+                    col[j] = rand.Next(23);
+                Stage1small.TestCases.Add(new Lab10Stage1TestCase(Gr, col, wyniks[i], 1, "Maly test losowy " + i.ToString()));
+            }
+            for (int i = 5; i < 9; i++)
+            {
+                Graph Gr = rgg.Graph(18, 0.15);
+                int[] col = new int[Gr.VertexCount];
+                for (int j = 0; j < Gr.VertexCount; j++)
+                    col[j] = rand.Next(23);
+                Stage1small.TestCases.Add(new Lab10Stage1TestCase(Gr, col, wyniks[i], 1, "Maly test losowy " + i.ToString()));
+            }
         }
 
+        void PrepareMediumTests()
+        {
+            int n = 13;
+            Graph clique = new Graph(n);
+            int[] col = new int[n];
+            for (int i = 0; i < n; i++)
+                for (int j = i + 1; j < n; j++)
+                    clique.AddEdge(i, j);
+            for (int i = 0; i < n; i++)
+                col[i] = i;
+            Stage1medium.TestCases.Add(new Lab10Stage1TestCase(clique, col, 0, 1, "Klika bez powtorzen"));
+
+            Graph p2;
+            int[] col2;
+            makePathSquareTest(8, out p2, out col2);
+            Stage1medium.TestCases.Add(new Lab10Stage1TestCase(p2, col2, 16, 1, "Kwadrat sciezki z powtorzeniem"));
+
+            Random rand = new Random(1343);
+            Graph p22;
+            int[] col22;
+            makeRandomPermutation(p2, col2, out p22, out col22, 1343);
+            Stage1medium.TestCases.Add(new Lab10Stage1TestCase(p22, col22, 16, 1, "Kwadrat sciezki z powtorzeniem, permutacja"));
+
+            int[] wyniks = { 0, 4, 0, 8, 18, 12, 12, 16 };
+            RandomGraphGenerator rgg = new RandomGraphGenerator(15);
+            for (int i = 0; i < 4; i++)
+            {
+                Graph G;
+                int[] coll;
+                makeSmartRandomTest(rgg, 27, 0.12, 25, out G, out coll, 13);
+                Stage1medium.TestCases.Add(new Lab10Stage1TestCase(G, coll, wyniks[i], 1, "Średni test losowy " + i.ToString()));
+            }
+            for (int i = 4; i < 8; i++)
+            {
+                Graph G;
+                int[] coll;
+                makeSmartRandomTest(rgg, 27, 0.12, 5, out G, out coll, 13);
+                Stage1medium.TestCases.Add(new Lab10Stage1TestCase(G, coll, wyniks[i], 1, "Średni test losowy " + i.ToString()));
+            }
+        }
+
+        void PrepareLargeTests()
+        {
+            int n = 150;
+            Graph clique = new Graph(n);
+            int[] col = new int[n];
+            for (int i = 0; i < n; i++)
+                for (int j = i + 1; j < n; j++)
+                    clique.AddEdge(i, j);
+            for (int i = 0; i < n; i++)
+                col[i] = i;
+            Stage1large.TestCases.Add(new Lab10Stage1TestCase(clique, col, 0, 1, "Klika bez powtorzen"));
+
+            Graph p2;
+            int[] col2;
+            makePathSquareTest(80, out p2, out col2);
+            Stage1large.TestCases.Add(new Lab10Stage1TestCase(p2, col2, 160, 1, "Kwadrat sciezki z powtorzeniem"));
+            Graph p22;
+            int[] col22;
+            makeRandomPermutation(p2, col2, out p22, out col22, 1343);
+            Stage1large.TestCases.Add(new Lab10Stage1TestCase(p22, col22, 160, 1, "Kwadrat sciezki z powtorzeniem, permutacja"));
+
+            int[] wyniks = { 4, 0, 0, 6, 42, 38, 30, 48 };
+            RandomGraphGenerator rgg = new RandomGraphGenerator(16);
+            for (int i = 0; i < 4; i++)
+            {
+                Graph G;
+                int[] coll;
+                makeSmartRandomTest(rgg, 500, 0.02, 480, out G, out coll, 15);
+                Stage1large.TestCases.Add(new Lab10Stage1TestCase(G, coll, wyniks[i], 1, "Duży test losowy " + i.ToString()));
+            }
+            for (int i = 4; i < 8; i++)
+            {
+                Graph G;
+                int[] coll;
+                makeSmartRandomTest(rgg, 500, 0.02, 90, out G, out coll, 15);
+                Stage1large.TestCases.Add(new Lab10Stage1TestCase(G, coll, wyniks[i], 6, "Duży test losowy " + i.ToString()));
+            }
+        }
+
+        static void makePathSquareTest(int n, out Graph G, out int[] col)
+        {
+            G = new Graph(4 * n);
+            for (int i = 0; i < 4 * n - 1; i++)
+                G.AddEdge(i, i + 1);
+            for (int i = 0; i < 4 * n - 2; i++)
+                G.AddEdge(i, i + 2);
+            col = new int[4 * n];
+            for (int i = 0; i < n; i++)
+            {
+                col[2 * i] = col[2 * n + 2 * i] = 2 * i;
+                col[2 * i + 1] = 2 * i + 1;
+                col[2 * n + 2 * i + 1] = 2 * n + 2 * i + 1;
+            }
+        }
+
+        static void makeSmartRandomTest(RandomGraphGenerator rgg, int n, double density, int colors, out Graph G, out int[] col, int seed = 10)
+        {
+            Random rand = new Random(seed);
+            G = rgg.Graph(n, density);
+            col = new int[n];
+            int tries = 0;
+            for (int i = 0; i < n; i++, tries++)
+            {
+                col[i] = rand.Next(colors);
+                foreach (int v in G.OutNeighbors(i))
+                    if (v < i && col[v] == col[i])
+                        i--;
+                if (tries > 5 * n * colors * Math.Log10(colors))
+                {
+                    tries = 0;
+                    colors++;
+                }
+            }
+        }
+
+        static void makeRandomPermutation(IGraph G, int[] c, out Graph Gout, out int[] cout, int seed = 10)
+        {
+            Random rand = new Random(seed);
+            int[] perm = new int[G.VertexCount];
+            perm[0] = 0;
+            for (int i = 1; i < G.VertexCount; i++)
+            {
+                int posi = rand.Next(i + 1);
+                for (int j = i; j >= posi + 1; j--)
+                    perm[j] = perm[j - 1];
+                perm[posi] = i;
+            }
+            Gout = new Graph(G.VertexCount);
+            cout = new int[c.GetLength(0)];
+            for (int i = 0; i < G.VertexCount; i++)
+            {
+                cout[perm[i]] = c[i];
+                foreach (int v in G.OutNeighbors(i))
+                    Gout.AddEdge(perm[i], perm[v]);
+            }
+        }
+
+        public override double ScoreResult()
+        {
+            return 2.5;
+        }
     }
 
     class Program
     {
-        static void Main(string[] args)
+
+        static int Fibonacci(int n)
         {
-            var tests = new Lab06Tests();
+            if (n == 0 || n == 1)
+                return 1;
+            else
+                return Fibonacci(n-1) + Fibonacci(n-2);
+        }
+
+        public static void Main()
+        {
+            var tests = new Lab10Tests();
             tests.PrepareTestSets();
+
+
+            DateTime t1 = DateTime.Now;
+            int z = Fibonacci(39);
+            DateTime t2 = DateTime.Now;
+
             foreach (var ts in tests.TestSets)
             {
+                DateTime t3 = DateTime.Now;
                 ts.Value.PerformTests(verbose: true, checkTimeLimit: false);
+                DateTime t4 = DateTime.Now;
+
+                Console.WriteLine($"Unormowany czas działania: {(t4 - t3).TotalMilliseconds / (t2 - t1).TotalMilliseconds * 0.45: 0.00}s");
+                Console.WriteLine();
             }
+
+
+
         }
+
     }
+
+
 }
